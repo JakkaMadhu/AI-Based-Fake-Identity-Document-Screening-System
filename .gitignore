@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.env
+
+# SQLite Database
+*.db
+*.sqlite3
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Uploaded Files & Private Identity Data
+uploads/
+backend/uploads/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!frontend/public/*.png
+!frontend/public/*.svg
+!frontend/src/assets/*
