@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
-export default function LiveCameraScanner({ 
+export default function LiveCameraScanner({
   mode = 'document', // 'document' or 'face'
-  onCapture, 
+  onCapture,
   onCancel,
   promptText
 }) {
@@ -104,7 +104,7 @@ export default function LiveCameraScanner({
           const targetX = vWidth / 2;
           const targetY = vHeight / 2;
           const dist = Math.hypot(faceCenterX - targetX, faceCenterY - targetY);
-          
+
           if (dist < vWidth * 0.25 && face.width > vWidth * 0.20) {
             isFacePresent = true;
           }
@@ -114,7 +114,7 @@ export default function LiveCameraScanner({
       }
     }
 
-    // 2. Pixel-Level Computer Vision Sharpness & Skin-Tone Verification
+    // 2. Pixel-Level Computer Vision Verification of Complete Vertical Face (Forehead, Cheeks, Chin)
     let analyzeCanvas = analyzeCanvasRef.current;
     if (!analyzeCanvas) {
       analyzeCanvas = document.createElement('canvas');
@@ -131,70 +131,75 @@ export default function LiveCameraScanner({
 
     const frameData = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
-    // Sample oval center region: 30% to 70% X, 20% to 80% Y
-    let skinPixels = 0;
-    let totalSamples = 0;
+    // Verify complete vertical face presence across 3 zones:
+    // Upper Zone (Forehead/Eyes), Mid Zone (Nose/Cheeks), Lower Zone (Mouth/Chin)
+    let upperSkin = 0, upperTotal = 0;
+    let midSkin = 0, midTotal = 0;
+    let lowerSkin = 0, lowerTotal = 0;
     let gradientSum = 0;
+    let gradSamples = 0;
 
-    for (let y = Math.floor(sampleH * 0.25); y < Math.floor(sampleH * 0.75); y += 2) {
-      for (let x = Math.floor(sampleW * 0.30); x < Math.floor(sampleW * 0.70); x += 2) {
+    for (let y = Math.floor(sampleH * 0.15); y < Math.floor(sampleH * 0.85); y += 2) {
+      for (let x = Math.floor(sampleW * 0.25); x < Math.floor(sampleW * 0.75); x += 2) {
         const idx = (y * sampleW + x) * 4;
         const r = frameData[idx];
         const g = frameData[idx + 1];
         const b = frameData[idx + 2];
-        totalSamples++;
 
-        // Standard Human Skin-Tone Chrominance Model (covers all diverse skin tones)
-        if (r > 45 && g > 30 && b > 20 && r > g && (r - b) > 10 && Math.abs(r - g) > 8) {
-          skinPixels++;
+        // Standard Human Skin-Tone Model (covers all diverse skin tones)
+        const isSkin = (r > 45 && g > 30 && b > 20 && r > g && (r - b) > 10 && Math.abs(r - g) > 8);
+
+        if (y < sampleH * 0.38) {
+          upperTotal++;
+          if (isSkin) upperSkin++;
+        } else if (y < sampleH * 0.62) {
+          midTotal++;
+          if (isSkin) midSkin++;
+        } else {
+          lowerTotal++;
+          if (isSkin) lowerSkin++;
         }
 
-        // Horizontal Laplacian / Sobel gradient for motion-blur detection
+        // Gradient for motion-blur detection
         const nextIdx = (y * sampleW + (x + 1)) * 4;
-        const rNext = frameData[nextIdx];
         const downIdx = ((y + 1) * sampleW + x) * 4;
-        const rDown = frameData[downIdx];
-        gradientSum += Math.abs(r - rNext) + Math.abs(r - rDown);
+        gradientSum += Math.abs(r - frameData[nextIdx]) + Math.abs(r - frameData[downIdx]);
+        gradSamples++;
       }
     }
 
-    const skinRatio = totalSamples > 0 ? (skinPixels / totalSamples) : 0;
-    const avgGradient = totalSamples > 0 ? (gradientSum / totalSamples) : 0;
+    const upperRatio = upperTotal > 0 ? (upperSkin / upperTotal) : 0;
+    const midRatio = midTotal > 0 ? (midSkin / midTotal) : 0;
+    const lowerRatio = lowerTotal > 0 ? (lowerSkin / lowerTotal) : 0;
+    const avgGradient = gradSamples > 0 ? (gradientSum / gradSamples) : 0;
 
-    // Sharpness threshold: moving/blurry faces have gradient < 14. Static in-focus faces have gradient >= 17
-    isSharp = avgGradient > 15.5;
+    isSharp = avgGradient > 14.5;
 
-    if (!isFacePresent) {
-      // If native API didn't trigger, use computer vision skin ratio (must be at least 25% human skin inside oval)
-      isFacePresent = skinRatio > 0.24;
-    }
+    // Complete face condition: Forehead, Cheeks, and Chin are ALL inside the frame!
+    const isCompleteFace = (upperRatio > 0.15 && midRatio > 0.25 && lowerRatio > 0.12);
 
-    // Evaluate Detection Stability
-    if (isFacePresent && isSharp) {
-      stableFramesRef.current += 1;
-      setDetectionState('detected');
+    if (isFacePresent || isCompleteFace) {
+      if (isSharp) {
+        stableFramesRef.current += 1;
+        setDetectionState('detected');
+        setStatusMessage('FACE FULLY DETECTED &bull; CAPTURING...');
+        setCountdown(null);
 
-      if (stableFramesRef.current >= 4) {
-        // High confidence sharp face held still -> trigger automatic capture!
-        hasCapturedRef.current = true;
-        setStatusMessage('FACE VERIFIED &bull; CAPTURED');
-        setCountdown(0);
-        executeCapture();
-      } else if (stableFramesRef.current >= 2) {
-        setStatusMessage('HUMAN FACE VERIFIED &bull; HOLD STILL...');
-        setCountdown(1);
+        // Capture immediately once the full face is verified stable in frame (~300ms to avoid camera blur)
+        if (stableFramesRef.current >= 2) {
+          hasCapturedRef.current = true;
+          executeCapture();
+        }
       } else {
-        setStatusMessage('FACE DETECTED &bull; STABILIZING...');
+        stableFramesRef.current = 0;
+        setDetectionState('blurry');
+        setStatusMessage('HOLD STEADY FOR CAPTURE');
+        setCountdown(null);
       }
-    } else if (isFacePresent && !isSharp) {
-      stableFramesRef.current = 0;
-      setDetectionState('blurry');
-      setStatusMessage('BLUR DETECTED &bull; HOLD STILL');
-      setCountdown(null);
     } else {
       stableFramesRef.current = 0;
       setDetectionState('searching');
-      setStatusMessage('ALIGN FACE INSIDE OVAL GUIDE');
+      setStatusMessage('CENTER COMPLETE FACE (FOREHEAD & CHIN)');
       setCountdown(null);
     }
   }, [mode, isCapturing]);
@@ -219,28 +224,30 @@ export default function LiveCameraScanner({
     const vWidth = video.videoWidth || 1280;
     const vHeight = video.videoHeight || 720;
 
-    let cropX = 0;
-    let cropY = 0;
-    let cropW = vWidth;
-    let cropH = vHeight;
-
     if (mode === 'document') {
-      cropW = Math.round(vWidth * 0.80);
-      cropH = Math.round(vHeight * 0.65);
-      cropX = Math.round((vWidth - cropW) / 2);
-      cropY = Math.round((vHeight - cropH) / 2);
-    } else if (mode === 'face') {
-      cropW = Math.round(vWidth * 0.55);
-      cropH = Math.round(vHeight * 0.75);
-      cropX = Math.round((vWidth - cropW) / 2);
-      cropY = Math.round((vHeight - cropH) / 2);
+      const cropW = Math.round(vWidth * 0.85);
+      const cropH = Math.round(vHeight * 0.70);
+      const cropX = Math.round((vWidth - cropW) / 2);
+      const cropY = Math.round((vHeight - cropH) / 2);
+      canvas.width = cropW;
+      canvas.height = cropH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    } else {
+      // In face mode: capture the full, uncropped video frame.
+      // This prevents chopping off the forehead, chin, or hair.
+      // The backend MTCNN deep learning model will automatically isolate and crop the face with 100% precision.
+      canvas.width = vWidth;
+      canvas.height = vHeight;
+      const ctx = canvas.getContext('2d');
+
+      // Mirror horizontally if using the front-facing camera so the photo matches the preview
+      if (facingMode === 'user') {
+        ctx.translate(vWidth, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, vWidth, vHeight);
     }
-
-    canvas.width = cropW;
-    canvas.height = cropH;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
     const base64Image = canvas.toDataURL('image/jpeg', 0.95);
     stopCamera();
@@ -251,6 +258,12 @@ export default function LiveCameraScanner({
   }
 
   function handleManualCapture() {
+    if (mode === 'face' && detectionState === 'searching') {
+      const confirmCapture = window.confirm(
+        "⚠️ No human face detected inside the camera oval guide.\n\nCapturing without a visible traveler face will trigger Biometric Impersonation Failure.\n\nDo you want to proceed anyway?"
+      );
+      if (!confirmCapture) return;
+    }
     hasCapturedRef.current = true;
     executeCapture();
   }
@@ -289,7 +302,7 @@ export default function LiveCameraScanner({
             autoPlay
             playsInline
             muted
-            className="camera-video"
+            className={`camera-video ${facingMode === 'user' ? 'mirrored' : ''}`}
             onLoadedMetadata={() => setIsInitializing(false)}
           />
 
@@ -312,7 +325,7 @@ export default function LiveCameraScanner({
                 <div className="camera-status-pill">
                   {detectionState === 'detected' && (
                     <span style={{ color: '#4ade80' }}>
-                      AUTOMATIC CAPTURE ACTIVE &bull; {countdown !== null ? 'CAPTURING...' : 'HOLD STILL'}
+                      FACE FULLY DETECTED &bull; CAPTURING INSTANTLY...
                     </span>
                   )}
                   {detectionState === 'blurry' && (
@@ -322,7 +335,7 @@ export default function LiveCameraScanner({
                   )}
                   {detectionState === 'searching' && (
                     <span style={{ color: '#94a3b8' }}>
-                      POSITION HUMAN FACE INSIDE OVAL (AUTO-DETECT)
+                      POSITION FACE INSIDE OVAL (OR CLICK 'TAKE SELFIE NOW')
                     </span>
                   )}
                 </div>
@@ -332,9 +345,9 @@ export default function LiveCameraScanner({
 
           {/* Controls */}
           <div className="camera-controls">
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={toggleFacingMode}
               style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}
             >
@@ -348,7 +361,7 @@ export default function LiveCameraScanner({
               disabled={isInitializing || isCapturing}
               style={{ padding: '0.55rem 1.4rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}
             >
-              {mode === 'document' ? "Capture Document Frame" : "Manual Capture Override"}
+              {mode === 'document' ? "Capture Document Frame" : "Take Selfie Now"}
             </button>
 
             {onCancel && (

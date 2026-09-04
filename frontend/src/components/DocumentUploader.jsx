@@ -43,26 +43,94 @@ export default function DocumentUploader({ onProceedWithFile, onProceedWithDualC
     const objectUrl = URL.createObjectURL(file);
     const fileExt = file.name.split('.').pop().toLowerCase();
     const isNonImage = ['pdf', 'doc', 'docx'].includes(fileExt);
-    setDocImage({
-      url: isNonImage ? null : objectUrl,
-      file: file,
-      base64: null,
-      filename: file.name,
-      isDocument: isNonImage,
-      fileExt: fileExt
-    });
-    setCurrentStep('face_capture');
+
+    if (!isNonImage) {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const testCanvas = document.createElement('canvas');
+          testCanvas.width = 100;
+          testCanvas.height = 100;
+          const ctx = testCanvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, 100, 100);
+          const p = ctx.getImageData(0, 0, 100, 100).data;
+          let sum = 0, sumSq = 0;
+          const count = 100 * 100;
+          for (let i = 0; i < p.length; i += 4) {
+            const lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+            sum += lum;
+            sumSq += lum * lum;
+          }
+          const mean = sum / count;
+          const stddev = Math.sqrt(Math.max(0, (sumSq / count) - (mean * mean)));
+          if (stddev < 8 || mean < 10 || (mean > 248 && stddev < 15)) {
+            setErrorMessage("⚠️ Selected file appears to be completely blank or empty. Please select a valid physical document.");
+            return;
+          }
+        } catch (e) {
+          // Ignore canvas read error and proceed
+        }
+        setDocImage({
+          url: objectUrl,
+          file: file,
+          base64: null,
+          filename: file.name,
+          isDocument: false,
+          fileExt: fileExt
+        });
+        setCurrentStep('face_capture');
+      };
+      img.onerror = () => {
+        setErrorMessage("Unable to render image file. File may be corrupted.");
+      };
+      img.src = objectUrl;
+    } else {
+      setDocImage({
+        url: null,
+        file: file,
+        base64: null,
+        filename: file.name,
+        isDocument: true,
+        fileExt: fileExt
+      });
+      setCurrentStep('face_capture');
+    }
   }
 
   function handleDocCameraCaptured(base64Image) {
     setErrorMessage(null);
-    setDocImage({
-      url: base64Image,
-      base64: base64Image,
-      file: null,
-      filename: `doc_scan_${Date.now().toString().slice(-6)}.jpg`
-    });
-    setCurrentStep('face_capture');
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const testCanvas = document.createElement('canvas');
+        testCanvas.width = 100;
+        testCanvas.height = 100;
+        const ctx = testCanvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 100, 100);
+        const p = ctx.getImageData(0, 0, 100, 100).data;
+        let sum = 0, sumSq = 0;
+        const count = 100 * 100;
+        for (let i = 0; i < p.length; i += 4) {
+          const lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+          sum += lum;
+          sumSq += lum * lum;
+        }
+        const mean = sum / count;
+        const stddev = Math.sqrt(Math.max(0, (sumSq / count) - (mean * mean)));
+        if (stddev < 8 || mean < 10 || (mean > 248 && stddev < 15)) {
+          setErrorMessage("⚠️ Captured frame is completely blank or dark. Please position a physical document under good lighting.");
+          return;
+        }
+      } catch (e) {}
+      setDocImage({
+        url: base64Image,
+        base64: base64Image,
+        file: null,
+        filename: `doc_scan_${Date.now().toString().slice(-6)}.jpg`
+      });
+      setCurrentStep('face_capture');
+    };
+    img.src = base64Image;
   }
 
   function handleFaceCameraCaptured(base64Image) {

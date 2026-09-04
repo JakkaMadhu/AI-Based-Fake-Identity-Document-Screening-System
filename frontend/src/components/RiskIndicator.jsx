@@ -4,8 +4,10 @@ export function StatusBadge({ status }) {
   if (!status) return null;
 
   let badgeClass = 'badge-review';
-  if (status === 'Likely Genuine') badgeClass = 'badge-genuine';
-  if (status === 'Suspicious') badgeClass = 'badge-suspicious';
+  const sUpper = status.toUpperCase();
+  if (sUpper.includes('REAL') || sUpper.includes('GENUINE')) badgeClass = 'badge-genuine';
+  else if (sUpper.includes('FAKE') || sUpper.includes('FORGED') || sUpper.includes('SUSPICIOUS') || sUpper.includes('INVALID')) badgeClass = 'badge-suspicious';
+  else if (sUpper.includes('REVIEW')) badgeClass = 'badge-review';
 
   return (
     <span className={`badge ${badgeClass}`}>

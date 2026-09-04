@@ -17,6 +17,9 @@ class ExtractedFields(BaseModel):
     nationality: Optional[str] = None
     expiry_date: Optional[str] = None
     gender: Optional[str] = None
+    document_type: Optional[str] = None
+    father_name: Optional[str] = None
+    mother_name: Optional[str] = None
     # Visa-specific fields
     visa_number: Optional[str] = None
     visa_type: Optional[str] = None
@@ -46,6 +49,10 @@ class TamperingForensics(BaseModel):
     editing_software_detected: Optional[str] = None
     anomaly_detected: bool = False
     tampering_details: List[str] = Field(default_factory=list)
+    trufor_score: Optional[float] = None
+    is_tampered: Optional[bool] = None
+    tamper_heatmap_url: Optional[str] = None
+    tamper_overlay_url: Optional[str] = None
 
 class LedgerBlock(BaseModel):
     block_index: int = 1
@@ -60,11 +67,23 @@ class FaceMatchResult(BaseModel):
     match_score: float = 0.0
     status: str = "Not Performed"
     details: str = ""
+    is_face_clear: Optional[bool] = True
+    clarity_issue: Optional[str] = None
+    error_code: Optional[str] = None
+
+class RiskBreakdown(BaseModel):
+    face_risk: float = 0.0
+    forgery_risk: float = 0.0
+    ocr_risk: float = 0.0
+    image_risk: float = 0.0
+    rule_risk: float = 0.0
+    weighted_score: float = 0.0
+    overrides_triggered: List[str] = Field(default_factory=list)
 
 class ScreeningResultResponse(BaseModel):
     document_id: str
     filename: str
-    screening_status: str  # "Likely Genuine", "Suspicious", "Requires Manual Review"
+    screening_status: str  # "REAL (AUTHENTIC)", "FAKE (FORGED / TAMPERED)", "REQUIRES MANUAL REVIEW", "INVALID DOCUMENT"
     risk_level: str        # "Low Risk", "Medium Risk", "High Risk"
     risk_score: int = 15   # 0 - 100
     genuine_probability: float
@@ -80,6 +99,9 @@ class ScreeningResultResponse(BaseModel):
     processing_time_ms: Optional[int] = None
     preview_url: Optional[str] = None
     face_preview_url: Optional[str] = None
+    tamper_heatmap_url: Optional[str] = None
+    tamper_overlay_url: Optional[str] = None
+    risk_breakdown: Optional[RiskBreakdown] = None
 
 class HistoryItem(BaseModel):
     document_id: str

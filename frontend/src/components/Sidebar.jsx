@@ -1,44 +1,60 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   return (
-    <aside className="sidebar">
-      <div className="sidebar-heading">Navigation Menu</div>
+    <>
+      {/* Backdrop overlay */}
+      {isOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={onClose} 
+          aria-hidden="true" 
+        />
+      )}
 
-      <NavLink 
-        to="/dashboard" 
-        className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-      >
-        Operations Dashboard
-      </NavLink>
+      {/* Slide-out Drawer */}
+      <aside className={`sidebar-drawer ${isOpen ? 'open' : ''}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-heading">Navigation Menu</div>
+          <button 
+            type="button" 
+            className="sidebar-close-btn" 
+            onClick={onClose}
+            aria-label="Close navigation menu"
+          >
+            &times;
+          </button>
+        </div>
 
-      <NavLink 
-        to="/upload" 
-        className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-      >
-        Screen New Document
-      </NavLink>
+        <nav className="sidebar-nav">
+          <NavLink 
+            to="/dashboard" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={onClose}
+          >
+            Operations Dashboard
+          </NavLink>
 
-      <NavLink 
-        to="/history" 
-        className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-      >
-        Inspection Log & Ledger
-      </NavLink>
+          <NavLink 
+            to="/upload" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            onClick={onClose}
+          >
+            Screen New Document
+          </NavLink>
+        </nav>
 
-      <NavLink 
-        to="/login" 
-        className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-      >
-        Officer Authentication
-      </NavLink>
-
-      <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-        <div style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>ICAO DOC 9303 & ELA</div>
-        <div>Standard Security Checkpoint</div>
-        <div style={{ marginTop: '0.4rem', fontFamily: 'var(--font-mono)' }}>Ver 2.4.0 (SIH-2026)</div>
-      </div>
-    </aside>
+        <div className="sidebar-footer">
+          <div style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>
+            AI Document Screening System
+          </div>
+          <div>Sovereign Vision OCR & Biometrics</div>
+          <div style={{ marginTop: '0.4rem', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Ver 2.5.0 &bull; Multi-Spectral Inspection
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }

@@ -6,10 +6,25 @@ import os
 
 TARGET_IMAGE_SIZE = (224, 224)
 
+def compute_laplacian_sharpness(img: Image.Image) -> float:
+    """Computes Laplacian edge variance to measure optical blur and focus clarity."""
+    try:
+        gray = np.array(img.convert("L"), dtype=np.float32)
+        if gray.shape[0] > 800:
+            gray = gray[::2, ::2]
+        lap = (
+            gray[:-2, 1:-1] + gray[2:, 1:-1] +
+            gray[1:-1, :-2] + gray[1:-1, 2:] -
+            4.0 * gray[1:-1, 1:-1]
+        )
+        return float(np.var(lap))
+    except Exception:
+        return 100.0
+
 def preprocess_image_for_model(image_path: str) -> Tuple[np.ndarray, Dict[str, Any]]:
     """
-    Loads image from disk, performs basic quality analysis, and pre-processes
-    it into the shape (1, 224, 224, 3) normalized for MobileNetV2.
+    Loads image from disk, performs comprehensive quality, blur, and blank document checks,
+    and pre-processes it for vision models.
     """
     with Image.open(image_path) as img:
         if img.mode != "RGB":
@@ -20,9 +35,21 @@ def preprocess_image_for_model(image_path: str) -> Tuple[np.ndarray, Dict[str, A
         # Image quality indicators
         stat = ImageStat.Stat(img)
         mean_brightness = sum(stat.mean) / 3.0
+        mean_stddev = sum(stat.stddev) / 3.0
         rms = sum(stat.rms) / 3.0
 
-        # Resize to MobileNetV2 input: 224x224 with Lanczos resampling
+        # Sharpness / Blur metric
+        sharpness_score = compute_laplacian_sharpness(img)
+        is_blurry = bool(sharpness_score < 35.0)
+
+        # Blank / Empty document detection
+        is_blank = bool(
+            mean_stddev < 8.0 or 
+            (mean_brightness > 248.0 and mean_stddev < 15.0) or 
+            mean_brightness < 12.0
+        )
+
+        # Resize to standard batch shape
         resized = img.resize(TARGET_IMAGE_SIZE, Image.Resampling.LANCZOS)
         
         # Convert to float numpy array
@@ -38,9 +65,13 @@ def preprocess_image_for_model(image_path: str) -> Tuple[np.ndarray, Dict[str, A
             "original_width": orig_w,
             "original_height": orig_h,
             "mean_brightness": round(mean_brightness, 2),
+            "mean_stddev": round(mean_stddev, 2),
             "is_too_dark": mean_brightness < 40,
             "is_too_bright": mean_brightness > 220,
-            "contrast_rms": round(rms, 2)
+            "contrast_rms": round(rms, 2),
+            "sharpness_score": round(sharpness_score, 2),
+            "is_blurry": is_blurry,
+            "is_blank": is_blank
         }
 
         return batch_input, quality_metadata

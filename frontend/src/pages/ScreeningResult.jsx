@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import ResultCard from '../components/ResultCard';
 import { getDocumentResult } from '../services/api';
 
@@ -32,10 +32,14 @@ export default function ScreeningResult() {
 
   return (
     <div className="page-container">
-      <div style={{ marginBottom: '1.25rem' }}>
-        <Link to="/history" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600 }}>
-          Back to Inspection Log
-        </Link>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <button 
+          className="btn btn-primary" 
+          onClick={() => navigate('/upload')} 
+          style={{ padding: '0.45rem 1.1rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '6px' }}
+        >
+          Scan New Document
+        </button>
       </div>
 
       {loading && (
